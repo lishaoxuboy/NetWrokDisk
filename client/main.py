@@ -137,6 +137,7 @@ class MainWindow(Ui_Form, QWidget):
 
     def closeEvent(self, event):
         1 / 0
+        return
 
     def __init__(self):
         super().__init__()
