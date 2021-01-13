@@ -110,6 +110,7 @@ class FileSocket:
                self.msg_signal.emit(dict(title="OS错误", msg=data["msg"]))
                Stop_Send()
                Log.info("服务端发送文件错误， 已更新全局状态为暂停发送")
+
             # elif data["code"] == Protocol.Cancel_Upload:
             #     Stop_Send()
             #     Log.waring("服务器取消接受文件，已更新全局状态为暂停发送")

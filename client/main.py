@@ -19,6 +19,7 @@ class ProgressWindow(Ui_transfer, QWidget):
         super(Ui_transfer, self).__init__()
         self.setupUi(self)
         self.local = True
+        self.setWindowModality(Qt.ApplicationModal)
 
     def update_status(self, file_name, send_detail, progress=0):
         self.file_name.setText(file_name)
@@ -31,16 +32,16 @@ class ProgressWindow(Ui_transfer, QWidget):
         self.remaining_time.setText(remaining_time)
 
     def show_progress(self, data):
+        Log.info("进度条界面已打开")
         self.local = data["is_local"]
         self.show()
 
     def hide_progress(self, *args):
-        self.hide()
-        QApplication.processEvents()
-        Log.info("进度条界面已关闭")
         self.progress.setValue(0)
         for func in args:
             func()
+        Log.info("进度条界面已关闭")
+        self.hide()
 
     def closeEvent(self, event) -> None:
         reply = QMessageBox.question(self, "文件传送", "是否取消传送？", QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
@@ -153,6 +154,8 @@ class MainWindow(Ui_Form, QWidget):
         self._init_local_drive()                                                                        # 初始化本地盘符
         self._init_server_drive()
         self._init_file_table()
+        self._get_sys_info()
+        self._get_server_info()
 
         # 绑定信号槽
         self.show_signal.connect(self.Progress.show_progress)                                           # 显示上传界面信号
@@ -162,7 +165,18 @@ class MainWindow(Ui_Form, QWidget):
         self.remote_rename_signal.connect(self.rename_server_item)
         self.q_message_box_signal.connect(self.show_message_box)
 
-                                                                   # 初始化文件表格数据
+    def _get_sys_info(self):
+        self.Local_Window_Sys = False
+        if "Windows" in platform.platform():
+            self.Local_Window_Sys = True
+
+    def _get_server_info(self):
+        self.Data_Socket.Conn.sendall(Tools.encode(dict(code=Protocol.GetSysInfo)))
+        res = self.Data_Socket.Recv_Data_Queue.get()
+        if res["data"].get("windows"):
+            self.Remote_Window_Sys = True
+        else:
+            self.Remote_Window_Sys = False
 
     def closeEvent(self, event):
         1 / 0
@@ -207,31 +221,17 @@ class MainWindow(Ui_Form, QWidget):
             self.LocalComboBox.addItem(i)
         self.local_root = device["root"]
         self.local_path = device["path"]
-        self.LocalComboBox.currentIndexChanged.connect(lambda x: self.chang_drive(0))
-        self.LocalComboBox.activated.connect()
+        self.LocalComboBox.currentIndexChanged.connect(lambda x: self._chang_drive(Protocol.Local))
+        # self.LocalComboBox.activated.connect(self._local_combobox_activated)
 
-    def before_to_next(self, in_path, windows=True):
-        if not os.path.exists(in_path):
-            QMessageBox.warning(self, "路径错误", "输入正确盘符")
-            return
-        t_root = str()
-        t_path = str()
-        if windows:
-            base_root = in_path.split(":")
-            t_root = base_root[0] + ":"
-            base_path = in_path.replace(t_root, "")
-            t_path = str()
-            if base_path:
-                t_path = base_path[1:]
-        else:
-            base_root = in_path.split("/")
-            t_root = base_root[1]
-            replace_str = "/" + t_root
-            if base_root > 2:
-                replace_str += "/"
-            t_path = in_path.replace(replace_str, "")
-        return t_root, t_path
-
+    # def _local_combobox_activated(self):
+    #     _root, _path = Tools.before_to_next(self.LocalComboBox.currentText(), windows=False)
+    #     if _root:
+    #         self.local_root = _root
+    #         self.local_path = _path
+    #         self.reload_local_files()
+    #     else:
+    #         Log.info("无效路径%s" % self.LocalComboBox.currentText())
 
     def _init_file_table(self):
         # 设置本地表格右键功能
@@ -394,30 +394,19 @@ class MainWindow(Ui_Form, QWidget):
         else:
            self.reload_server_files()
 
-    def chang_drive(self, obj):
-        if obj == 0:
-            t_obj = self.LocalFiles
-            t_com = self.LocalComboBox
+    def _chang_drive(self, obj):
+        if obj == Protocol.Local:
+            _root, _path = Tools.before_to_next(self.LocalComboBox.currentText(), self.Local_Window_Sys)
+            if _root:
+                self.local_root, self.local_path = _root, _path
+                self.reload_local_files()
         else:
-            t_obj = self.RemoteFiles
-            t_com = self.RemoteComboBox
-
-        drive = t_com.currentText()[:3]
-        if "Local" in t_obj.objectName():
-            self.local_root = drive
-            self.local_path = ""
-            self.display_files(t_obj, FileIO.get_files(t_com.currentText()))
-            # self.File_Socket.FileIO.update_path(is_local=True, root=drive)
-            # self.File_Socket.FileIO.update_path(is_local=True, path="")
-            Log.debug("本地盘符已切换 %s" % drive)
-        else:
-            self.remote_root = drive
-            self.remote_path = ""
-
-            self.display_files(t_obj, self.get_server_files(t_com.currentText())["data"])
-            # self.File_Socket.FileIO.update_path(is_local=False, root=drive)
-            # self.File_Socket.FileIO.update_path(is_local=False, path="")
-            Log.debug("远程盘符已切换 %s" % drive)
+            _root, _path = Tools.before_to_next(self.RemoteComboBox.currentText(), self.Remote_Window_Sys, check_exists=False)
+            if _root:
+                data = self.get_server_files(_root, _path)["data"]
+                if data:
+                    self.remote_root, self.remote_path = _root, _path
+                    self.display_files(self.RemoteFiles, data)
 
     def _to_next_node(self, evt, f_widget):
         drive = self.get_drive(f_widget)
@@ -451,7 +440,7 @@ class MainWindow(Ui_Form, QWidget):
         else:
             if "Local" in f_widget.objectName():
                 Log.info("打开%s" % next_node)
-                os.system("start " + next_node)
+                os.system(next_node)
             else:
                 QMessageBox.warning(self.RemoteFiles, '提示', '不能打开远程文件')
 
@@ -543,7 +532,7 @@ class MainWindow(Ui_Form, QWidget):
         server_drive = self.Data_Socket.get_server_drive()
         for i in server_drive["data"]["device"]:
             self.RemoteComboBox.addItem(i)
-        self.RemoteComboBox.currentIndexChanged.connect(lambda x: self.chang_drive(1))
+        self.RemoteComboBox.currentIndexChanged.connect(lambda x: self._chang_drive(1))
         self.remote_path = server_drive["data"]["path"]
         self.remote_root = server_drive["data"]["root"]
 

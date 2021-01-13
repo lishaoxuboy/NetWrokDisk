@@ -50,6 +50,8 @@ class DataSocket:
         # 取消上传
         elif pro_code == Protocol.Cancel_Upload:
             File_Socket.Write_File.Stop_Write()
+        elif pro_code == Protocol.GetSysInfo:
+            self.Conn.sendall(DataManage.get_sys_info())
 
 
 class DataManage:
@@ -85,8 +87,9 @@ class DataManage:
         is_success, msg = FileIO.del_every(None, asb_path)
         protocol = dict(code=Protocol.OsRemoveItem, success=is_success, message=msg)
         b_data = b""
-        if protocol["success"]:
+        if is_success:
             b_data = json.dumps(FileIO.get_files(os.path.dirname(asb_path))).encode()
+        protocol.update(dict(data_len=len(b_data)))
         return Tools.encode(protocol=protocol, data=b_data)
 
     @staticmethod
@@ -111,6 +114,11 @@ class DataManage:
         if result:
             data = json.dumps(FileIO.get_files(path)).encode()
         return Tools.encode(protocol, data)
+
+    @staticmethod
+    def get_sys_info():
+        is_windows = "Windows" in platform.platform()
+        return Tools.encode(dict(code=Protocol.GetSysInfo), json.dumps(dict(windows=is_windows)).encode())
 
 
 class FileSocket:

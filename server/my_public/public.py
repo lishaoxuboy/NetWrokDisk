@@ -86,6 +86,9 @@ Log = MyLog()
 
 
 class Protocol:
+    Local = 0
+    Server = 1
+    SuccessCode = 0
     UpLoad_File = 1001
     Request_DownLoad_File = 1002
     Response_DwonnLoad_File = 1003
@@ -103,6 +106,7 @@ class Protocol:
     OsMkDir = 3004
     OsReName = 3005
     WriteEndFlag = b'~*~*'
+    GetSysInfo = 4001
 
 
 class Tools:
@@ -150,17 +154,19 @@ class Tools:
             return 0
 
     @staticmethod
-    def decode(b_data):
-        protocol = dict()
+    def decode(b_data, json_decode=True) -> bytes or dict:
         if not b_data:
             return None
-        b_protocol = ''
+        n_data = ''
         for i in b_data:
             i = chr(i)
             if i != '$':
-                b_protocol += i
+                n_data += i
         try:
-            data = json.loads(b_protocol)
+            if not json_decode:
+                return n_data
+            else:
+                data = json.loads(n_data)
             return data
         except Exception as e:
             print(b_data)
@@ -199,13 +205,14 @@ class Tools:
         return dict(root=_root, path=_path, device=_drive)
 
     @staticmethod
-    def before_to_next(in_path, windows=True):
+    def before_to_next(in_path, windows=True, check_exists=True):
         try:
             t_root = str()
             t_path = str()
             if windows:
-                if not os.path.exists(in_path):
-                    return None, None
+                if check_exists:
+                    if not os.path.exists(in_path):
+                        return None, None
                 base_root = in_path.split(":")
                 if not len(base_root) > 1:
                     return None, None
@@ -215,13 +222,14 @@ class Tools:
                 if base_path:
                     t_path = base_path[1:]
             else:
-                if not os.path.exists(in_path):
-                    return None, None
+                if check_exists:
+                    if not os.path.exists(in_path):
+                        return None, None
                 base_root = in_path.split("/")
-                t_root = base_root[1]
-                if t_root != "Users":
+                t_root = os.path.join("/", base_root[1])
+                if "Users" not in t_root:
                     return None, None
-                replace_str = "/" + t_root
+                replace_str = t_root
                 if len(base_root) > 2:
                     replace_str += "/"
                 t_path = in_path.replace(replace_str, "")
@@ -376,42 +384,34 @@ class RecvStream:
             解决服务器端发送10字节， 客户端分N次接收的问题，所以约定发送的大小，除了到文件结尾，否则会一直接收到约定大小。
         :return:
         """
-        last_data = b""
-        b_data = b""
-        # try:
         while True:
             try:
-                last_data = b_data
                 b_data = self.Conn.recv(self.Recv_Size)
                 b_data_len = len(b_data)
             except ConnectionResetError:
                 print("Socket断开了")
                 break
             if not b_data_len:
+                # print("空消息")
+                time.sleep(0.01)
                 continue
-
+            # 不能先解析协议，协议有可能会被分割发送
             if b_data_len == self.Recv_Size:
-                protocl = Tools.decode(b_data[:Protocol_Len])
-                if protocl["code"] in self.File_Transfer_Protocol_List:
-                    """
-                    1、接收到完整的文件传送数据组
-                    """
-                    protocl.update(dict(stream=b_data[Protocol_Len:]))
-                    self.on_msg(protocl)
-
+                protocol = Tools.decode(b_data[:Protocol_Len])
+                if protocol["code"] in self.File_Transfer_Protocol_List:
+                    if protocol["last_group"]:
+                        stream = b_data[Protocol_Len:][:protocol["last_group_size"]]
+                    else:
+                        stream = b_data[Protocol_Len:]
+                    protocol.update(dict(stream=stream))
+                    self.on_msg(protocol)
                 else:
                     try:
-                        """
-                        4、接收到数据的全部    
-                        """
                         dict_data = Tools.decode(b_data[Protocol_Len:])
-                        protocl.update(dict(data=dict_data))
-                        self.on_msg(protocl)
+                        protocol.update(dict(data=dict_data))
+                        self.on_msg(protocol)
                     except json.decoder.JSONDecodeError:
-                        """
-                        3、接收到数据的第一组
-                        """
-                        need_recv_len = protocl["data_size"]
+                        need_recv_len = protocol["data_len"]
                         receive_len = len(b_data[Protocol_Len:])
                         receive_b_data = b_data[Protocol_Len:]
                         # 循环接受剩余数据
@@ -420,42 +420,30 @@ class RecvStream:
                             receive_len += len(b_data)
                             receive_b_data += b_data
                         dict_data = json.loads(receive_b_data)
-                        protocl.update(data=dict_data)
-                        self.on_msg(protocl)
+                        protocol.update(data=dict_data)
+                        self.on_msg(protocol)
             else:
-                """
-                没有接收到额定的数据长度
-                    1、接收到被切片的文件传输字节
-                    2、接收到了数据字节，但是数据字节不足额定长度
-                    3、接收到了被切片的数据字节
-                """
-                # 协议接受不完整, 先接收协议
-                if b_data_len < Protocol_Len:
-                    while b_data_len != Protocol_Len:
-                        b_data += self.Conn.recv(Protocol_Len - b_data_len)
-                        b_data_len = len(b_data)
+                # 先判断协议部分是否接收完毕
+                while b_data_len < Protocol_Len:
+                    b_data += self.Conn.recv(Protocol_Len - b_data_len)
+                    b_data_len = len(b_data)
 
-                protocl = Tools.decode(b_data[:Protocol_Len])
+                protocol = Tools.decode(b_data[:Protocol_Len])
+                if not protocol:
+                    print("协议解析错误")
+                    continue
+
                 # 文件传送
-                if protocl["code"] in self.File_Transfer_Protocol_List:
-                    # 最后一组，需要确定数据大小，其余的都是默认一个包长度
-                    if protocl["last_group"]:
-                        # 最后一组的数据不足，需要接收完毕
-                        while b_data_len - Protocol_Len != Recv_Len:
-                            b_data += self.Conn.recv(Recv_Len - b_data_len)
-                            b_data_len = len(b_data)
-                        protocl.update(stream=b_data[Protocol_Len:])
-                        self.on_msg(protocl)
-                        # 不是最后一组，需要拼接数据
+                if protocol["code"] in self.File_Transfer_Protocol_List:
+                    while Recv_Len != b_data_len:
+                        b_data += self.Conn.recv(Recv_Len - b_data_len)
+                        b_data_len = len(b_data)
+                    if protocol["last_group"]:
+                        file_stream = b_data[Protocol_Len:][:protocol["last_group_size"]]
                     else:
-                        receive_len = len(b_data[Protocol_Len:])
-                        receive_b_data = b_data[Protocol_Len:]
-                        while self.Recv_Size - Protocol_Len - receive_len != 0:
-                            b_data = self.Conn.recv(self.Recv_Size - Protocol_Len - receive_len)
-                            receive_len += len(b_data)
-                            receive_b_data += b_data
-                        protocl.update(stream=receive_b_data)
-                        self.on_msg(protocl)
+                        file_stream = b_data[Protocol_Len:]
+                    protocol.update(stream=file_stream)
+                    self.on_msg(protocol)
                 # 数据传送
                 else:
                     """
@@ -466,11 +454,11 @@ class RecvStream:
                             data = json.loads(b_data[Protocol_Len:])
                         else:
                             data = dict()
-                        protocl.update(data=data)
-                        self.on_msg(protocl)
-                    except json.decoder.JSONDecodeError:
+                        protocol.update(data=data)
+                        self.on_msg(protocol)
+                    except Exception:
                         # 没接收到完整的数据
-                        need_recv_len = protocl["data_len"]
+                        need_recv_len = protocol["data_len"]
                         receive_len = len(b_data[Protocol_Len:])
                         receive_b_data = b_data[Protocol_Len:]
                         # 循环接受剩余数据
@@ -479,10 +467,8 @@ class RecvStream:
                             receive_len += len(b_data)
                             receive_b_data += b_data
                         dict_data = json.loads(receive_b_data)
-                        protocl.update(data=dict_data)
-                        self.on_msg(protocl)
-        # except Exception as e:
-        #     print("Stream: ", e)
+                        protocol.update(data=dict_data)
+                        self.on_msg(protocol)
 
 
 class WriteFile:
@@ -560,7 +546,7 @@ class WriteFile:
                     except Exception as e:
                         # 需要通知不在发送
                         self.IO_Error = True
-                        return False, ""
+                        return False, e.args[1]
                 self.File_Fp = open(abs_path, "ba")
                 self.File_Fp.write(stream)
                 # 首次写入回调
@@ -626,6 +612,8 @@ class SendFile:
                 update_widget = False
                 while len(send_b_data) > Protocol_Len:
                     if STOP_SEND:
+                        Start_Send()
+                        self.after_end and self.after_end.emit()
                         return False, "已停止发送 %s" % file_name
                     send_len = self.Conn.send(send_b_data)
                     send_size += send_len
@@ -637,6 +625,7 @@ class SendFile:
                         Log.info("文件已发送至结尾")
                         protocol["last_group_size"] = len(b_data)
                         b_data = Tools.padding_data(b_data, Send_Len)
+                        print("发送的长度 %s" % len(b_data))
                         self.Conn.send(Tools.encode(protocol, b_data))
                         Log.info("%s 上传完毕， 耗时 %d" % (file_name, int(time.time()) - start_time))
                         self.after_end and self.after_end.emit()
