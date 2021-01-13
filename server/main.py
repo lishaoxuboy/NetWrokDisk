@@ -3,16 +3,19 @@ import time
 from threading import Thread
 import os
 import json
+
 import platform
 import shutil
-from my_public.public import Tools, FileIO, Recv_Len, Protocol_Len, MyLog, RecvStream, Protocol, WriteFile, SendFile, Stop_Send, Start_Send
+
 from PyQt5.QtWidgets import QFileIconProvider
 from PyQt5.QtCore import QFileInfo
+from my_public.public import Tools, FileIO, Recv_Len, Protocol_Len, MyLog, RecvStream, Protocol, WriteFile, SendFile, Stop_Send, Start_Send
+from config import Config_Impl
 
 
 Log = MyLog("log.txt")
-file_service_ip = ('0.0.0.0', 8081)
-data_service_ip = ('0.0.0.0', 8082)
+FILE_IP = (Config_Impl.File_Ip, Config_Impl.File_Port)
+DATA_IP = (Config_Impl.Data_Ip, Config_Impl.Data_Port)
 
 
 class DataSocket:
@@ -149,7 +152,7 @@ Socket_Storage = SocketStorage()
 
 def data_socket():
     f_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    f_socket.bind(data_service_ip)
+    f_socket.bind(DATA_IP)
     f_socket.listen()
     print("数据传送服务已启动，等待连接。。。")
     while True:
@@ -162,7 +165,7 @@ def data_socket():
 
 if __name__ == '__main__':
     f_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    f_socket.bind(file_service_ip)
+    f_socket.bind(FILE_IP)
     f_socket.listen()
     print("文件传送服务已启动，等待连接。。。")
     Thread(target=data_socket).start()
