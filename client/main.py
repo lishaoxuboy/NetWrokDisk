@@ -1,17 +1,17 @@
 import sys
 import os
-from PyQt5.Qt import QApplication
 
+from PyQt5.Qt import QApplication
 from PyQt5.QtWidgets import (QWidget, QTableWidgetItem, QAbstractItemView, QFileIconProvider, QMenu, QMessageBox)
 from PyQt5.QtCore import Qt, QFileInfo, pyqtSignal
+import platform
 
-from my_public.public import Tools, FileIO, Protocol, Stop_Send
-from my_public import public
+from my_public.public import Tools, FileIO, Protocol, Stop_Send, FILE_TYPE_ICO
+from config import Config_Impl
 from file_socket import FileSocket, Log, DataSocket
 from upload import Ui_Form
 from progress import Ui_transfer
 from create_dir import Ui_widget
-import platform
 
 
 class ProgressWindow(Ui_transfer, QWidget):
@@ -135,10 +135,6 @@ class MainWindow(Ui_Form, QWidget):
     remote_rename_signal = pyqtSignal(dict)
     q_message_box_signal = pyqtSignal(dict)
 
-    def closeEvent(self, event):
-        1 / 0
-        return
-
     def __init__(self):
         super().__init__()
         self.remote_root = "/"
@@ -146,21 +142,54 @@ class MainWindow(Ui_Form, QWidget):
         self.remote_root = "/"
         self.remote_path = str()
         self.setupUi(self)
+
+        # 实例化组件
+        self.Create_Dir = CreateDir()                                                               # 创建目录对象
         self.Progress = ProgressWindow()                                                                # 进度条对象
         self.Data_Socket = DataSocket()                                                                 # 数据对象
+        self.File_Socket = FileSocket(self.q_message_box_signal, self.show_signal, self.update_signal, self.hide_signal)
 
-        self.Create_Dir = CreateDir()                                                               # 创建目录对象
+        # 初始化组件
         self._init_local_drive()                                                                        # 初始化本地盘符
         self._init_server_drive()
+        self._init_file_table()
+
+        # 绑定信号槽
         self.show_signal.connect(self.Progress.show_progress)                                           # 显示上传界面信号
         self.hide_signal.connect(lambda: self.Progress.hide_progress(self.reload_local_files, self.reload_server_files))  # 关闭上传界面信号
         self.update_signal.connect(self.update_status)                                                  # 更新上传进度信号
         self.remote_mk_dir_signal.connect(self.mk_server_dir)
         self.remote_rename_signal.connect(self.rename_server_item)
         self.q_message_box_signal.connect(self.show_message_box)
-        self.File_Socket = FileSocket(self.q_message_box_signal, self.show_signal, self.update_signal, self.hide_signal)
-                                                               # 初始化本地盘符
-        self._init_file_table()                                                                         # 初始化文件表格数据
+
+                                                                   # 初始化文件表格数据
+
+    def closeEvent(self, event):
+        1 / 0
+        return
+
+    # def keyPressEvent(self, event):
+    #     key = event.key()
+        # if Qt.Key_A <= key <= Qt.Key_Z:
+        #     if event.modifiers() & Qt.ShiftModifier:  # Shift 键被按下
+        #         self.statusBar().showMessage('"Shift+%s" pressed' % chr(key), 500)
+        #     elif event.modifiers() & Qt.ControlModifier:  # Ctrl 键被按下
+        #         self.statusBar().showMessage('"Control+%s" pressed' % chr(key), 500)
+        #     elif event.modifiers() & Qt.AltModifier:  # Alt 键被按下
+        #         self.statusBar().showMessage('"Alt+%s" pressed' % chr(key), 500)
+        #     else:
+        #         self.statusBar().showMessage('"%s" pressed' % chr(key), 500)
+        #
+        # elif key == Qt.Key_Home:
+        #     self.statusBar().showMessage('"Home" pressed', 500)
+        # elif key == Qt.Key_End:
+        #     self.statusBar().showMessage('"End" pressed', 500)
+        # elif key == Qt.Key_PageUp:
+        #     self.statusBar().showMessage('"PageUp" pressed', 500)
+        # elif key == Qt.Key_PageDown:
+        #     self.statusBar().showMessage('"PageDown" pressed', 500)
+        # else:  # 其它未设定的情况
+        #     QWidget.keyPressEvent(self, event)  # 留给基类处理
 
     def show_message_box(self, data):
         QMessageBox.warning(self, data["title"], data["msg"])
@@ -176,10 +205,33 @@ class MainWindow(Ui_Form, QWidget):
         device = Tools.get_drive()
         for i in device["device"]:
             self.LocalComboBox.addItem(i)
-
         self.local_root = device["root"]
         self.local_path = device["path"]
         self.LocalComboBox.currentIndexChanged.connect(lambda x: self.chang_drive(0))
+        self.LocalComboBox.activated.connect()
+
+    def before_to_next(self, in_path, windows=True):
+        if not os.path.exists(in_path):
+            QMessageBox.warning(self, "路径错误", "输入正确盘符")
+            return
+        t_root = str()
+        t_path = str()
+        if windows:
+            base_root = in_path.split(":")
+            t_root = base_root[0] + ":"
+            base_path = in_path.replace(t_root, "")
+            t_path = str()
+            if base_path:
+                t_path = base_path[1:]
+        else:
+            base_root = in_path.split("/")
+            t_root = base_root[1]
+            replace_str = "/" + t_root
+            if base_root > 2:
+                replace_str += "/"
+            t_path = in_path.replace(replace_str, "")
+        return t_root, t_path
+
 
     def _init_file_table(self):
         # 设置本地表格右键功能
@@ -362,7 +414,7 @@ class MainWindow(Ui_Form, QWidget):
             self.remote_root = drive
             self.remote_path = ""
 
-            self.display_files(t_obj, MainWindow.get_server_files(t_com.currentText()))
+            self.display_files(t_obj, self.get_server_files(t_com.currentText())["data"])
             # self.File_Socket.FileIO.update_path(is_local=False, root=drive)
             # self.File_Socket.FileIO.update_path(is_local=False, path="")
             Log.debug("远程盘符已切换 %s" % drive)
@@ -383,6 +435,7 @@ class MainWindow(Ui_Form, QWidget):
         if file_type == "File Folder" or file_type == "Folder":
             if "Local" in f_widget.objectName():
                 self.local_path = next_path
+                Log.info("*" * 10 + self.local_path)
                 self.display_files(f_widget, FileIO.get_files(next_node))
                 # self.File_Socket.FileIO.update_path(is_local=True, path=self.local_path)
                 self.LocalComboBox.setItemText(self.LocalComboBox.currentIndex(), os.path.join(self.local_root, self.local_path))
@@ -460,7 +513,7 @@ class MainWindow(Ui_Form, QWidget):
             item0 = QTableWidgetItem()
             item0.setText(file_obj["name"])
             file_type = file_obj['type']
-            item0.setIcon(provider.icon(QFileInfo(public.FILE_TYPE_ICO.get(file_type, "ico/txt.txt"))))
+            item0.setIcon(provider.icon(QFileInfo(FILE_TYPE_ICO.get(file_type, "ico/txt.txt"))))
             # f_t_widget.setRowHeight(index, 20)
             f_widget.setItem(index, 0, item0)
 

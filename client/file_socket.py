@@ -3,23 +3,15 @@ import time
 import queue
 import sys
 
+from my_public.public import Tools, Protocol, Recv_Len,  MyLog, RecvStream, SendFile, WriteFile, \
+    Start_Send, Stop_Send
+from config import Config_Impl
 
-from my_public.public import Tools, Protocol, Recv_Len,  MyLog, RecvStream, SendFile, WriteFile, Start_Send, Stop_Send
 
-
+# 初始化日志、服务端端口
 Log = MyLog("log.txt")
-# ip = "www.lsxboy.top"
-# ip = "127.0.0.1"
-ip = "192.168.1.61"
-args = [ip, 8081, 8082]
-Log.info(sys.argv)
-for index, value in enumerate(sys.argv):
-    if index > 0:
-        args[index - 1] = value
-
-print(args[0], args[1], args[2])
-file_service_ip = (args[0], args[1])
-data_service_ip = (args[0], args[2])
+FILE_IP = (Config_Impl.File_Ip, Config_Impl.File_Port)
+DATA_IP = (Config_Impl.Data_Ip, Config_Impl.Data_Port)
 
 
 class DataSocket:
@@ -36,7 +28,7 @@ class DataSocket:
         self.Conn = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         while True:
             try:
-                self.Conn.connect(data_service_ip)
+                self.Conn.connect(DATA_IP)
                 print(f"数据服务连接成功")
                 break
             except Exception as e:
@@ -81,23 +73,22 @@ class FileSocket:
         self.Uuid = str()                                               # 服务器分配的UUID
         self.Conn = None                                                # 保存文件通信的SOCKET对象
         self.Progress = None                                            # 进度条对象
-        self.Recv_Size = Recv_Len                                       # 每次接收包大小
         self._connect()                                                 # 连接文件传送通道
         self.msg_signal = signal
         # # 发送通道，开始发送文件信号函数，每次发送文件调用信号函数，发送结束调用信号函数
         # self.Conn, self.before_begin_send, self.every_send, self.after_end = args
         self.Send_File = SendFile(self.Conn, True, *args)                                   # 初始化文件发送接收类
         self.Write_File = WriteFile(*args)                                   # 初始化文件发送接收类
-        RecvStream(self.Conn, self.on_message, self.Recv_Size)          # 专门管理数据接受，并且回调给处理函数
+        RecvStream(self.Conn, self.on_message)          # 专门管理数据接受，并且回调给处理函数
 
     def _connect(self):
         """与服务器建立socket"""
         self.Conn = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         while True:
             try:
-                self.Conn.connect(file_service_ip)
+                self.Conn.connect(FILE_IP)
                 Log.info(f"文件服务连接成功，等待接收uuid....")
-                uuid = self.Conn.recv(self.Recv_Size)
+                uuid = self.Conn.recv(Recv_Len)
                 Log.info("文件服务uuid: %s" % uuid)
                 self.Uuid = uuid
                 break

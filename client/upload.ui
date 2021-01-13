@@ -16,6 +16,9 @@
   <layout class="QGridLayout" name="gridLayout">
    <item row="0" column="3">
     <widget class="QComboBox" name="RemoteComboBox">
+     <property name="enabled">
+      <bool>true</bool>
+     </property>
      <property name="minimumSize">
       <size>
        <width>0</width>
@@ -26,6 +29,9 @@
       <font>
        <pointsize>11</pointsize>
       </font>
+     </property>
+     <property name="editable">
+      <bool>true</bool>
      </property>
     </widget>
    </item>
@@ -47,6 +53,9 @@
    </item>
    <item row="0" column="0">
     <widget class="QComboBox" name="LocalComboBox">
+     <property name="enabled">
+      <bool>true</bool>
+     </property>
      <property name="minimumSize">
       <size>
        <width>0</width>
@@ -57,6 +66,15 @@
       <font>
        <pointsize>11</pointsize>
       </font>
+     </property>
+     <property name="acceptDrops">
+      <bool>false</bool>
+     </property>
+     <property name="toolTip">
+      <string/>
+     </property>
+     <property name="editable">
+      <bool>true</bool>
      </property>
     </widget>
    </item>

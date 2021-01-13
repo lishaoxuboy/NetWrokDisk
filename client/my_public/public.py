@@ -11,26 +11,27 @@ import psutil
 import shutil
 import platform
 import getpass
+from config import Config_Impl
 
-Protocol_Len = 512
-One_Group_Len = 1024 * 10
+Protocol_Len = Config_Impl.Protocol_Len
+One_Group_Len = Config_Impl.Data_Len
 Send_Len = One_Group_Len - Protocol_Len
 Recv_Len = One_Group_Len
-
 STOP_SEND = False
+UPDATE_INTERVAL = False
 
 FILE_TYPE_ICO = dict()
-FILE_TYPE_ICO["File Folder"] = "ico/Folder"
-FILE_TYPE_ICO["Folder"] = "ico/Folder"
-FILE_TYPE_ICO["jpg File"] = "ico/jpg.png"
-FILE_TYPE_ICO["png File"] = "ico/png.png"
-FILE_TYPE_ICO["sys File"] = "ico/img.png"
-FILE_TYPE_ICO["text File"] = "ico/txt.txt"
-FILE_TYPE_ICO["File"] = "ico/txt.txt"
-FILE_TYPE_ICO["zip File"] = "ico/zip.zip"
-FILE_TYPE_ICO["7z File"] = "ico/7z.7z"
-FILE_TYPE_ICO["rar File"] = "ico/rar.rar"
-FILE_TYPE_ICO["gz File"] = "ico/gz.gz"
+FILE_TYPE_ICO["File Folder"] = "static/ico/Folder"
+FILE_TYPE_ICO["Folder"] = "static/ico/Folder"
+FILE_TYPE_ICO["jpg File"] = "static/ico/jpg.png"
+FILE_TYPE_ICO["png File"] = "static/ico/png.png"
+FILE_TYPE_ICO["sys File"] = "static/ico/img.png"
+FILE_TYPE_ICO["text File"] = "static/ico/txt.txt"
+FILE_TYPE_ICO["File"] = "static/ico/txt.txt"
+FILE_TYPE_ICO["zip File"] = "static/ico/zip.zip"
+FILE_TYPE_ICO["7z File"] = "static/ico/7z.7z"
+FILE_TYPE_ICO["rar File"] = "static/ico/rar.rar"
+FILE_TYPE_ICO["gz File"] = "static/ico/gz.gz"
 
 
 def Stop_Send():
@@ -196,6 +197,37 @@ class Tools:
             _root = "/Users"
             _path = os.path.join(username)
         return dict(root=_root, path=_path, device=_drive)
+
+    @staticmethod
+    def before_to_next(in_path, windows=True):
+        try:
+            t_root = str()
+            t_path = str()
+            if windows:
+                if not os.path.exists(in_path):
+                    return None, None
+                base_root = in_path.split(":")
+                if not len(base_root) > 1:
+                    return None, None
+                t_root = base_root[0] + ":"
+                base_path = in_path.replace(t_root, "")
+                t_path = str()
+                if base_path:
+                    t_path = base_path[1:]
+            else:
+                if not os.path.exists(in_path):
+                    return None, None
+                base_root = in_path.split("/")
+                t_root = base_root[1]
+                if t_root != "Users":
+                    return None, None
+                replace_str = "/" + t_root
+                if len(base_root) > 2:
+                    replace_str += "/"
+                t_path = in_path.replace(replace_str, "")
+            return t_root, t_path
+        except Exception:
+            return None, None
 
 
 class FileIO:
@@ -501,13 +533,15 @@ class WriteFile:
                         remaining_time=data.get("remaining_time"),
                         send_detail=data.get("send_detail", ""),
                     )
-                    if self.every_write:
+                    if self.every_write and UPDATE_INTERVAL:
                         if int(time.time()) % 2 == 0 and not self.update_widget:
                             self.update_widget = True
                             self.every_write.emit(progress_data)
                         if int(time.time()) % 2 == 1 and self.update_widget:
                             self.update_widget = False
                             self.every_write.emit(progress_data)
+                    else:
+                        self.every_write.emit(progress_data)
 
                 if data["last_group"]:
                     # 写入结束回调
@@ -626,11 +660,14 @@ class SendFile:
                     # time.sleep(0.001)
                     if self.every_send:
                         # self.every_send.emit(p_data)
-                        if int(time.time()) % 2 == 0 and not update_widget:
-                            update_widget = True
-                            self.every_send.emit(p_data)
-                        if int(time.time()) % 2 == 1 and update_widget:
-                            update_widget = False
+                        if UPDATE_INTERVAL:
+                            if int(time.time()) % 2 == 0 and not update_widget:
+                                update_widget = True
+                                self.every_send.emit(p_data)
+                            if int(time.time()) % 2 == 1 and update_widget:
+                                update_widget = False
+                                self.every_send.emit(p_data)
+                        else:
                             self.every_send.emit(p_data)
                     else:
                         protocol.update(p_data)
