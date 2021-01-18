@@ -69,6 +69,7 @@ class Ui_Form(object):
 
     def retranslateUi(self, Form):
         _translate = QtCore.QCoreApplication.translate
+        _translate = QtCore.QCoreApplication.partial
         Form.setWindowTitle(_translate("Form", "Form"))
         self.RemoteLastDir.setText(_translate("Form", "上一级"))
         self.DowLoad.setText(_translate("Form", "下载"))

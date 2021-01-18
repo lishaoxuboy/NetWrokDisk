@@ -3,8 +3,7 @@ import time
 import queue
 import sys
 
-from my_public.public import Tools, Protocol, Recv_Len,  MyLog, RecvStream, SendFile, WriteFile, \
-    Start_Send, Stop_Send
+from my_public.public import Tools, Protocol, Recv_Len,  MyLog, RecvStream, SendFile, WriteFile
 from config import Config_Impl
 
 
@@ -37,14 +36,10 @@ class DataSocket:
 
     def on_message(self, data):
         """监听服务端发送的消息"""
-        Log.info("接收到协议 %d" % data["code"])
         self.Recv_Data_Queue.put(data)
 
     def get_server_files(self, *args):
-        _root, _path, select_item, is_dir_name = args
-        protocol = dict(code=Protocol.GetServerFiles)
-        data = dict(root=_root, path=_path, item=select_item, is_dir_name=is_dir_name)
-        data = Tools.encode(protocol, data)
+        data = Tools.encode(dict(code=Protocol.GetServerFiles), dict(path=args[0], item=args[1]))
         self.Conn.sendall(data)
         return self.Recv_Data_Queue.get()
 
@@ -74,12 +69,13 @@ class FileSocket:
         self.Conn = None                                                # 保存文件通信的SOCKET对象
         self.Progress = None                                            # 进度条对象
         self._connect()                                                 # 连接文件传送通道
-        self.msg_signal = signal
-        # # 发送通道，开始发送文件信号函数，每次发送文件调用信号函数，发送结束调用信号函数
-        # self.Conn, self.before_begin_send, self.every_send, self.after_end = args
-        self.Send_File = SendFile(self.Conn, True, *args)                                   # 初始化文件发送接收类
-        self.Write_File = WriteFile(*args)                                   # 初始化文件发送接收类
-        RecvStream(self.Conn, self.on_message)          # 专门管理数据接受，并且回调给处理函数
+        self.msg_signal = signal                                        # 发送消息
+        self.Send_File = SendFile(self.Conn, True, *args)               # 初始化文件发送接收类
+        self.Write_File = WriteFile(*args)                              # 初始化文件发送接收类
+        self.Data_Socket = args[-1]
+        self.Os_Error = False
+        self.Error_List = list()
+        RecvStream(self.Conn, self.on_message)                          # 专门管理数据接受，并且回调给处理函数
 
     def _connect(self):
         """与服务器建立socket"""
@@ -98,38 +94,80 @@ class FileSocket:
 
     def on_message(self, data):
         try:
-            """监听服务端发送的消息"""
-            # 客户端接收服务端传动的文件，也就是客户端的下载操作
-            if data['code'] == Protocol.UpLoad_File:
-                data.update(dict(is_local=False))
-                result, msg = self.Write_File.write(data)
-                if not result:
-                    Log.waring(msg)
-                    self.msg_signal.emit(dict(title="OS错误", msg=msg))
-            elif data["code"] == Protocol.OsError:
-               self.msg_signal.emit(dict(title="OS错误", msg=data["msg"]))
-               Stop_Send()
-               Log.info("服务端发送文件错误， 已更新全局状态为暂停发送")
+            # 写入文件
 
-            # elif data["code"] == Protocol.Cancel_Upload:
-            #     Stop_Send()
-            #     Log.waring("服务器取消接受文件，已更新全局状态为暂停发送")
-            elif data["code"] == Protocol.Stop_Send_Success:
-                Log.info("服务端停止接收")
-            else:
-                Log.info("未知协议 %d" % data["code"])
+            if data['code'] == Protocol.UpLoad_File:
+                file_uuid = data["uuid"]
+                # 发生异常后，停止写入
+                if self.Os_Error or file_uuid in self.Error_List:
+                    return
+                if data.get("first_group"):
+                    self.Send_File.before_begin_send.emit(dict(is_local=False))
+                if data.get("last_group"):
+                    self.Send_File.after_end.emit()
+                self.Write_File.reset_write()
+                res_code, msg = self.Write_File.write(data)
+                # 写入成功
+                if res_code == 1:
+                    pass
+                    # self.Send_File.after_end and self.Send_File.after_end.emit()
+                # 写入被取消(一般接收不到，因为取消下载，服务端立马停止发送)
+                elif res_code == -1:
+                    Log.info("写入被取消")
+                # 写入过程发生异常错误
+                elif res_code == -2:
+                    self.Os_Error = True
+                    self.Error_List.append(file_uuid)
+                    self.Write_File.after_end.emit()
+                    self.Data_Socket.Conn.sendall(Tools.encode(dict(code=Protocol.Write_Error_Cancel_Download)))
+                    # res = self.Data_Socket.Recv_Data_Queue.get()
+                    # if res["code"] == Protocol.Write_Error_Cancel_Download_Response:
+                    self.msg_signal.emit(dict(title="警告", msg="下载失败"))
+                    self.Os_Error = False
+                else:
+                    Log.info("写入未知错误")
+            # 服务端写入错误，申请取消上传
+            elif data["code"] == Protocol.Write_Error_Cancel_Upload:
+                self.Send_File.stop_send()
+                self.Conn.sendall(Tools.encode(dict(code=Protocol.Write_Error_Cancel_Upload_Response)))
+                Log.info("停止向服务端上传文件")
+                self.msg_signal.emit(dict(title="警告", msg="上传失败"))
+            # elif data["code"] == Protocol.Response_Os_Error:
+            #    self.msg_signal.emit(dict(title="OS错误", msg=data["msg"]))
+            #    self.Write_File.Stop_Write()
+            #    self.Os_Error = False
+            # 服务端出现错误，停止接收，客户端需要停止发送文件呢
+            # elif data["code"] == Protocol.Stop_Send:
+            #     Log.info("停止发送")
+            #     # self.Os_Error = False
+            #     self.Send_File.after_end.emit()
+            # else:
+            #     Log.info("未知协议 %d" % data["code"])
         except Exception as e:
             Log.error("FileSocket.on_message 错误%s" % e)
 
     def upload_file(self, data):
-        Start_Send()
-        data.update(is_local=True)
-        result, msg = self.Send_File.send(data)
-        if not result:
+        # 清除发送控制标志
+        self.Send_File.reset_send()
+        # 打开发送窗口
+        self.Send_File.before_begin_send.emit(dict(is_local=True))
+        res_code, msg = self.Send_File.send(data)
+        # 发送成功
+        if res_code == 1:
+            self.Send_File.after_end.emit()
+            # self.Send_File.after_end and self.Send_File.after_end.emit()
+        # 发送被取消
+        elif res_code == -1:
+            self.Send_File.after_end.emit()
+            # self.Conn.sendall(Tools.encode(dict(code=Protocol.Cancel_Upload, msg=msg)))
+            # self.Send_File.after_end.emit()
+        # 发送过程出现异常错误
+        else:
             Log.info(msg)
             self.msg_signal.emit(dict(title="IO错误", msg=msg))
 
     def download_file(self, protocol):
+        self.Write_File.reset_write()
         protocol.update(code=Protocol.Request_DownLoad_File)
         data = Tools.encode(protocol)
         self.Conn.sendall(data)

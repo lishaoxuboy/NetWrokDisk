@@ -29,6 +29,7 @@ class Config:
         self.Data_Port = self.get_conf("data_port", int)
         self.Protocol_Len = self.get_conf("protocol_len", int)
         self.Data_Len = self.get_conf("data_len", int)
+        self.Update_Interval = self.get_conf("update_interval", int)
 
 
 Config_Impl = Config()
