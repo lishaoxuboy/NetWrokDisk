@@ -21,18 +21,18 @@ Recv_Len = One_Group_Len
 UPDATE_INTERVAL = Config_Impl.Update_Interval
 
 FILE_TYPE_ICO = dict()
-FILE_TYPE_ICO["File Folder"] = "/Users/lishaoxu/MySoft/NetWrokDisk/client/static/ico/Folder"
-FILE_TYPE_ICO["Folder"] = "/Users/lishaoxu/MySoft/NetWrokDisk/client/static/ico/Folder"
+FILE_TYPE_ICO["File Folder"] = "static/ico/Folder"
+FILE_TYPE_ICO["Folder"] = "static/ico/Folder"
 # FILE_TYPE_ICO["Alias"] = "/Users/lishaoxu/MySoft/NetWrokDisk/client/static/ico/Folder"
-FILE_TYPE_ICO["jpg File"] = "/Users/lishaoxu/MySoft/NetWrokDisk/client/static/ico/jpg.png"
-FILE_TYPE_ICO["png File"] = "/Users/lishaoxu/MySoft/NetWrokDisk/client/static/ico/png.png"
-FILE_TYPE_ICO["sys File"] = "/Users/lishaoxu/MySoft/NetWrokDisk/client/static/ico/img.png"
-FILE_TYPE_ICO["text File"] = "/Users/lishaoxu/MySoft/NetWrokDisk/client/static/ico/txt.txt"
-FILE_TYPE_ICO["File"] = "/Users/lishaoxu/MySoft/NetWrokDisk/client/static/ico/txt.txt"
-FILE_TYPE_ICO["zip File"] = "/Users/lishaoxu/MySoft/NetWrokDisk/client/static/ico/zip.zip"
-FILE_TYPE_ICO["7z File"] = "/Users/lishaoxu/MySoft/NetWrokDisk/client/static/ico/7z.7z"
-FILE_TYPE_ICO["rar File"] = "/Users/lishaoxu/MySoft/NetWrokDisk/client/static/ico/rar.rar"
-FILE_TYPE_ICO["gz File"] = "/Users/lishaoxu/MySoft/NetWrokDisk/client/static/ico/gz.gz"
+FILE_TYPE_ICO["jpg File"] = "static/ico/jpg.png"
+FILE_TYPE_ICO["png File"] = "static/ico/png.png"
+FILE_TYPE_ICO["sys File"] = "static/ico/img.png"
+FILE_TYPE_ICO["text File"] = "static/ico/txt.txt"
+FILE_TYPE_ICO["File"] = "static/ico/txt.txt"
+FILE_TYPE_ICO["zip File"] = "static/ico/zip.zip"
+FILE_TYPE_ICO["7z File"] = "static/ico/7z.7z"
+FILE_TYPE_ICO["rar File"] = "static/ico/rar.rar"
+FILE_TYPE_ICO["gz File"] = "static/ico/gz.gz"
 
 
 
@@ -412,11 +412,27 @@ class RecvStream:
                     protocol.update(dict(stream=stream))
                     self.on_msg(protocol)
                 else:
-                    try:
-                        dict_data = Tools.decode(b_data[Protocol_Len:])
-                        protocol.update(dict(data=dict_data))
-                        self.on_msg(protocol)
-                    except json.decoder.JSONDecodeError:
+                    # try:
+                    #     dict_data = Tools.decode(b_data[Protocol_Len:])
+                    #     if dict_data == None:
+                    #         raise json.decoder.JSONDecodeError("", "", "")
+                    #     protocol.update(dict(data=dict_data))
+                    #     self.on_msg(protocol)
+                    # except json.decoder.JSONDecodeError:
+                    #     need_recv_len = protocol["data_len"]
+                    #     receive_len = len(b_data[Protocol_Len:])
+                    #     receive_b_data = b_data[Protocol_Len:]
+                    #     # 循环接受剩余数据
+                    #     while need_recv_len - receive_len != 0:
+                    #         b_data = self.Conn.recv(need_recv_len - receive_len)
+                    #         receive_len += len(b_data)
+                    #         receive_b_data += b_data
+                    #     dict_data = json.loads(receive_b_data)
+                    #     protocol.update(data=dict_data)
+                    #     self.on_msg(protocol)
+
+                    dict_data = Tools.decode(b_data[Protocol_Len:])
+                    if dict_data is None:
                         need_recv_len = protocol["data_len"]
                         receive_len = len(b_data[Protocol_Len:])
                         receive_b_data = b_data[Protocol_Len:]
@@ -426,8 +442,12 @@ class RecvStream:
                             receive_len += len(b_data)
                             receive_b_data += b_data
                         dict_data = json.loads(receive_b_data)
-                        protocol.update(data=dict_data)
-                        self.on_msg(protocol)
+
+                    protocol.update(data=dict_data)
+                    self.on_msg(protocol)
+
+
+
             else:
                 # 先判断协议部分是否接收完毕
                 while b_data_len < Protocol_Len:
