@@ -427,7 +427,7 @@ class MainWindow(Ui_Form, QWidget):
                 QMessageBox.warning(self.RemoteFiles, '提示', '不能打开远程文件')
 
     def _change_dir(self, f_widget, path):
-        print("*" * 30, path)
+        print("***********************", path)
         if "Local" in f_widget.objectName():
             data = FileIO.get_files(path)
             self.display_files(f_widget, data)

@@ -647,11 +647,16 @@ class SendFile:
                     return 1, ""
                 send_b_data = Tools.encode(protocol, b_data)
                 update_widget = False
+
+                last_one_second_size = int()
+                one_second_size = int()
+                one_second = int(time.time())
                 while len(send_b_data) > Protocol_Len:
                     if self._Stop_Send:
                         return -1, "发送被取消 %s" % file_name
                     send_len = self.Conn.send(send_b_data)
                     send_size += send_len
+                    one_second_size += send_len
                     # 再次读取
                     b_data = FP.read(Send_Len)
                     # 读取到了文件结尾
@@ -673,12 +678,16 @@ class SendFile:
                     p_data = dict(
                         file_name=file_name,
                         progress=round(send_size / file_size * 100, 2),
-                        speed=Tools.b_size(one_s),
+                        speed=Tools.b_size(last_one_second_size),
                         elapsed_time=Tools.format_show_second(time.time() - start_time),
                         remaining_time=Tools.format_show_second((file_size - send_size) / one_s),
                         update_widget=self.update_widget,
                         send_detail=Tools.b_size(send_size) + "/" + file_size_detail
                     )
+                    if one_second != int(time.time()):
+                        last_one_second_size = one_second_size
+                        one_second_size = int()
+                        one_second = int(time.time())
                     if self.every_send:
                         if UPDATE_INTERVAL:
                             if int(time.time()) % 2 == 0 and not update_widget:

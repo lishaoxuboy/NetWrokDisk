@@ -97,7 +97,7 @@ class FileSocket:
             # 写入文件
 
             if data['code'] == Protocol.UpLoad_File:
-                file_uuid = data["uuid"]
+                file_uuid = data.get("uuid")
                 # 发生异常后，停止写入
                 if self.Os_Error or file_uuid in self.Error_List:
                     return
