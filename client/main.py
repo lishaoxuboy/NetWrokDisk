@@ -13,8 +13,8 @@ if __name__ == '__main__':
     if len(sys.argv) > 1:
         IP = sys.argv[1]
     else:
-        IP = "www.lsxboy.top"
-        # IP = "127.0.0.1"
+        # IP = "www.lsxboy.top"
+        IP = "127.0.0.1"
     print("IP", IP)
     app = QApplication(sys.argv)
     session = run((IP, 1122), file_group_len=2048, once_recv=2048, enable_ping=False, protocol_len=1024)
