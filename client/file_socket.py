@@ -61,20 +61,26 @@ class FileIO:
         self.FP.close()
 
 
-class Main:
+class Handler:
     """
     可发送文件
     可发送对象
     """
 
-    # 运行参数的初始化
-    def __init__(self, base_socket, file_io, padding_char=b"*", on_error=None, protocol_len=1024, file_group_len=5120, once_recv=1024):
-        self.file_io = file_io
+    def __init__(self,
+                base_socket,
+                 file_io,
+                 protocol_len,
+                 file_once_recv,
+                 once_recv,
+                 padding_char=b"*",
+                 on_error=None):
+        self.file_io = file_io              # 当接受到文件时候
         self.once_recv = once_recv
         self.base_socket = base_socket
         self.padding_char = padding_char
         self.protocol_len = protocol_len
-        self.file_group_len = file_group_len
+        self.file_group_len = file_once_recv
         self.on_error = on_error
         self.file_fp = None
         self.allow_send = False
@@ -86,6 +92,7 @@ class Main:
         self.set_status = None
 
         self.response_data = queue.Queue()
+    # 运行参数的初始化
 
     # 接受信息（继承RecvStream类）
     def on_msg(self, b_data):
@@ -346,18 +353,3 @@ class Main:
     # 服务发生异常，通知客户端
     def error(self, msg):
         self.send_data(500, msg, dict(msg=msg))
-
-
-def run(addr, file_group_len=10240, once_recv=5120, enable_ping=True, protocol_len=1024):
-    import socket
-    session = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    session.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    session.connect(addr)
-    print(f"与 {addr} 连接成功")
-    socket_base = BaseSocket(session, addr, enable_ping=enable_ping, protocol_len=protocol_len)
-    # 线程
-    socket_base.recv_data_for_every()
-    # 实例化主程序
-    main = Main(socket_base, FileIO, file_group_len=file_group_len, once_recv=once_recv, protocol_len=protocol_len)
-    socket_base.on_msg = main.on_msg
-    return main

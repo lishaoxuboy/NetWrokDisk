@@ -14,7 +14,7 @@ class BaseSocket:
     """
     接受一个socket会话，接收到一组完整的包后调用回掉函数
     """
-    def __init__(self, conn, address, callback=None, protocol_len=256, enable_ping=False, retry_interval=1, ping_interval=3):
+    def __init__(self, conn, address, protocol_len, enable_ping=False, retry_interval=1, ping_interval=3):
 
         self.conn = conn
         self.conn_online = True
@@ -23,7 +23,7 @@ class BaseSocket:
         self.address = address
         self.enable_ping = enable_ping
         self.protocol_len = protocol_len
-        self.on_msg = callback
+        self.on_msg = None
         if enable_ping:
             threading.Thread(target=self.check_conn).start()
             threading.Thread(target=self.ping).start()
