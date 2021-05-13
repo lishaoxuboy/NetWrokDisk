@@ -22,10 +22,11 @@ def create_socket(addr, protocol_len):
 if __name__ == '__main__':
     app = QApplication(sys.argv)
     # 启动变量
-    ip = sys.argv[1] if len(sys.argv) > 1 else "www.lsxboy.top"
+    ip = sys.argv[1] if len(sys.argv) > 1 else "127.0.0.1"
     port = 1122
     p_len = 1024
     once_recv_btyes = 2048
+    #
     once_recv_file_bytes = 10240
     # 创建socket核心
     Session = create_socket((ip, port), protocol_len=p_len)
