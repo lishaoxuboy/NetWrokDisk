@@ -149,11 +149,10 @@ class Handler:
                             name=os.path.basename(protocol["write_path"]),
                             progress=int(receive_size / all_size * 100),
                             speed=tools.bytes_to_speed(last_second_recv_bytes),
-                            detail=tools.bytes_to_speed(last_second_recv_bytes) + "/" + detail_size,
+                            detail=tools.bytes_to_speed(receive_size) + "/" + detail_size,
                             elapsed_time=tools.second_to_time(int(time.time()) - start_time),
                             remaining_time=tools.second_to_time((all_size - receive_size) / last_second_recv_bytes))
                         self.set_status.emit(tools.Dict(progress))
-
                         last_second = int(time.time())
                         last_second_recv_bytes = int()
 

@@ -127,8 +127,7 @@ class Main:
                 self.file_fp.stream_queue.put(receive_data)  # 为了不让IO耽误时间，这里使用工厂模式处理文件的写入
             self.file_fp.stream_queue.put(protocol)
             self.file_fp = None
-            print(f"文件写入缓存成功 {os.path.basename(protocol['write_path'])} \n"
-                  f"文件一共{size} 接收了 {receive_size}  最后一组数据长度 {len(last_d)} \n {last_d}")
+            print(f"文件写入缓存成功 {os.path.basename(protocol['write_path'])}")
 
         elif code == 101:  # 客户端需要下载文件
             receive_data = self.base_socket.recv_agroup(size)
@@ -243,11 +242,11 @@ class Main:
             file_name = os.path.basename(file_path)
             size, unit, bytes_size = tools.file_size(file_path)
             # 用来辅助计算发送进度
-            last_s = int(time.time())
-            last_s_send_group = int()
-            send_group = 1
-            start_time = int(time.time())
-            update_status = False
+            # last_s = int(time.time())
+            # last_s_send_group = int()
+            # send_group = 1
+            # start_time = int(time.time())
+            # update_status = False
             with open(file_path, 'rb') as fp:
                 protocol = dict(code=100, msg='', size=bytes_size, write_path=os.path.join(write_to, file_name))
                 self.before_send(protocol)
@@ -260,32 +259,33 @@ class Main:
                     self.base_socket.send_all(b_data)
                     b_data = fp.read(self.file_group_len)
                     continue
-                    last_s_send_group += 1
-                    # 如果设置了回调函数，每秒钟调用并且传递回调函数
-                    if int(time.time()) != last_s and not update_status:  # 说明过去了一秒
-                        progress_data = tools.Dict(
-                            operation="下载中",
-                            name=file_name,
-                            progress=int((send_group * self.file_group_len / bytes_size) * 100),
-                            speed=tools.bytes_to_speed(last_s_send_group * self.file_group_len),
-                            detail=tools.bytes_to_speed(send_group * self.file_group_len) + "/" + str(
-                                size) + unit,
-                            elapsed_time=tools.second_to_time(int(time.time()) - start_time),
-                            remaining_time=tools.second_to_time(
-                                (bytes_size - send_group * self.file_group_len) / (
-                                        last_s_send_group * self.file_group_len))
-                        )
-                        last_s_send_group = int()
-                        last_s = int(time.time())
-                        base_data = tools.jsondumps(progress_data)
-                        base_data_len = len(base_data)
-                        b_data =  tools.padding_data(base_data, self.file_group_len - base_data_len)
-                        update_status = True
-                        # print("progress data", bytes_progress_data)
-                    else:
-                        send_group += 1
-                        update_status = False
-                        b_data = fp.read(self.file_group_len)
+                    # 服务端不提供进度，客户端自己计算
+                    # last_s_send_group += 1
+                    # # 如果设置了回调函数，每秒钟调用并且传递回调函数
+                    # if int(time.time()) != last_s and not update_status:  # 说明过去了一秒
+                    #     progress_data = tools.Dict(
+                    #         operation="下载中",
+                    #         name=file_name,
+                    #         progress=int((send_group * self.file_group_len / bytes_size) * 100),
+                    #         speed=tools.bytes_to_speed(last_s_send_group * self.file_group_len),
+                    #         detail=tools.bytes_to_speed(send_group * self.file_group_len) + "/" + str(
+                    #             size) + unit,
+                    #         elapsed_time=tools.second_to_time(int(time.time()) - start_time),
+                    #         remaining_time=tools.second_to_time(
+                    #             (bytes_size - send_group * self.file_group_len) / (
+                    #                     last_s_send_group * self.file_group_len))
+                    #     )
+                    #     last_s_send_group = int()
+                    #     last_s = int(time.time())
+                    #     base_data = tools.jsondumps(progress_data)
+                    #     base_data_len = len(base_data)
+                    #     b_data = tools.padding_data(base_data, self.file_group_len - base_data_len)
+                    #     update_status = True
+                    #     # print("progress data", bytes_progress_data)
+                    # else:
+                    #     send_group += 1
+                    #     update_status = False
+                    #     b_data = fp.read(self.file_group_len)
 
     # 下载文件
     def down_load_files(self, file_list, write_path):
@@ -346,22 +346,23 @@ class Main:
 import socket
 import sys
 
-once_r = int(sys.argv[1]) if len(sys.argv) > 1 else 2048
+once_r = int(sys.argv[1]) if len(sys.argv) > 1 else 10240
+port = int(sys.argv[2]) if len(sys.argv) > 2 else 1123
+protocol_len = 1024
 print("once_r", once_r)
 while True:
     session = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     session.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    session.bind(("0.0.0.0", 1122))
+    session.bind(("0.0.0.0", port))
     session.listen(5)
-    print("正在等待连接...")
+    print("server start on 0.0.0.0:%s..." % port)
     c, addr = session.accept()
     print(f"来自 {addr} 的连接")
-    protocol_len = 1024
     socket_base = BaseSocket(c, addr, protocol_len=protocol_len)
     # 线程
     socket_base.recv_data_for_every()
     # 实例化主程序
-    main = Main(socket_base, FileIO, file_group_len=2048, once_recv=once_r, protocol_len=protocol_len)
+    main = Main(socket_base, FileIO, file_group_len=once_r, once_recv=once_r, protocol_len=protocol_len)
     print("主程序完成序列化")
     # 绑定socket收到消息后的回调函数
     socket_base.set_onmsg(main.on_msg)

@@ -119,6 +119,7 @@ class MainWindow(Base, Ui_Form, QWidget):
 
     def get_local_selected(self):
         selected_list = list()
+        # self.LocalFiles.selectionModel().selectedColumns()
         select_rows = self.LocalFiles.selectionModel().selectedRows()
         if len(select_rows):
             for i in select_rows:
@@ -190,9 +191,11 @@ class MainWindow(Base, Ui_Form, QWidget):
         # control + s
         if evt.key() == Qt.Key_S and evt.modifiers() == Qt.ControlModifier:
             self.selecte_send()
+        # 刷新
         if evt.modifiers() == Qt.ControlModifier and evt.key() == Qt.Key_R:
             self.local_reload_table()
             self.remote_reload()
+        # 删除
         if evt.modifiers() == Qt.ControlModifier and evt.key() == Qt.Key_D:
             self.select_del()
         # print(evt.key())
